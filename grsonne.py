@@ -20,20 +20,23 @@ import sqlite3
 
 class IrrdiationCalculator(object):
 
-    def __init__(self, x, y, azimut, angle):
-        self.x = x
-        self.y = y
+    def __init__(self, input_x, input_y, input_azimut, input_angle):
+        self.input_x = input_x
+        self.input_y = input_y
         self.center_x = None
         self.center_y = None
 
-        self.azimut = azimut
-        self.azimut_fields = ()
-        self.angle = angle
-        self.angle_fields = ()
+        self.input_azimut = input_azimut
+        self.min_azimut = None
+        self.max_azimut = None
+
+        self.input_angle = input_angle
+        self.min_angle = None
+        self.max_angle = None
+
         self.field_names = []
 
         self.irridation = None
-        self.check_input()
         self.db = sqlite3.connect(
             '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
         self.cursor = self.db.cursor()
@@ -42,48 +45,59 @@ class IrrdiationCalculator(object):
         self.check_input()
         self.center_x, self.center_y = self.get_center_coords()
         self._calculate_field_names()
+        values = self.get_values()
+        print values
+        coefficients = self._calculate_coeficients()
+        print self._run_calc(values, coefficients)
 
+    @staticmethod
+    def _run_calc(values, coefficients):
+        min_azimut_max_angle = (values['min_azimut_max_angle']
+                                * coefficients['min_azimut_max_angle'])
+        max_azimut_max_angle = (values['max_azimut_max_angle']
+                                * coefficients['max_azimut_max_angle'])
+        min_azimut_min_angle = (values['min_azimut_min_angle']
+                                * coefficients['min_azimut_min_angle'])
+        max_azimut_min_angle = (values['max_azimut_min_angle']
+                                * coefficients['max_azimut_min_angle'])
 
-    def _run_calc(x, y, azimut, angle):
-        field = 'I%s_%s' % (azimut, angle/10)
-        field = '%s, %s' % (field, field)
+        return (min_azimut_max_angle + max_azimut_max_angle +
+                min_azimut_min_angle + max_azimut_min_angle)
 
-        values = (x, y)
-        sql = "SELECT %s from 'GRsonne' WHERE x = ? AND y = ?" % field
-        print sql
-        #_get_db_data(sql, values)
-
-
-    def _get_db_data(sql, values):
-        db = sqlite3.connect(
-            '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
-
-        c = db.cursor()
-        c.execute(sql, values)
-        res = c.fetchone()
-        print res[0]
+    def get_values(self):
+        values = (self.center_x, self.center_y)
+        sql = ('SELECT I%s, I%s, I%s, I%s '
+               'FROM "GRsonne" '
+               'WHERE x = ? AND y = ?'
+                % self.field_names)
+        self.cursor.execute(sql, values)
+        res = self.cursor.fetchone()
+        return {'min_azimut_max_angle': res[0],
+                'max_azimut_max_angle': res[1],
+                'min_azimut_min_angle': res[2],
+                'max_azimut_min_angle': res[3]}
 
     def check_input(self):
         check_errors = []
 
         error_template = 'Invalid %s: Valid range is %s - %s, found %s'
 
-        error_message = error_template % ('x', 693000, 834000, self.x)
-        if self.x < 693000 or self.x > 834000:
+        error_message = error_template % ('x', 693000, 834000, self.input_x)
+        if self.input_x < 693000 or self.input_x > 834000:
             check_errors.append(error_message)
 
-        error_message = error_template % ('y', 114700, 215000, self.y)
-        if self.y < 114700 or self.y > 215000:
+        error_message = error_template % ('y', 114700, 215000, self.input_y)
+        if self.input_y < 114700 or self.input_y > 215000:
             check_errors.append(error_message)
 
-        error_message = error_template % ('azimut', 0, 360, self.azimut)
-        if self.azimut < 0 or self.azimut > 360:
+        error_message = error_template % ('azimut', 0, 360, self.input_azimut)
+        if self.input_azimut < 0 or self.input_azimut > 360:
             check_errors.append(error_message)
-        if self.azimut == 360:
-            self.azimut = 0
+        if self.input_azimut == 360:
+            self.input_azimut = 0
 
-        error_message = error_template % ('angle', 0, 90, self.angle)
-        if self.angle < 0 or self.angle > 90:
+        error_message = error_template % ('angle', 0, 90, self.input_angle)
+        if self.input_angle < 0 or self.input_angle > 90:
             check_errors.append(error_message)
 
         if check_errors:
@@ -91,20 +105,64 @@ class IrrdiationCalculator(object):
 
     def get_center_coords(self):
         #change 693000 - 693099 to 693050
-        x = int(self.x / 100) * 100 + 50
+        x = int(self.input_x / 100) * 100 + 50
 
         #change 114700 - 114799 to 114750
-        y = int(self.y / 100) * 100 + 50
+        y = int(self.input_y / 100) * 100 + 50
 
         return x, y
+
+    def _calculate_coeficients(self):
+        azimut_step = 0.05
+        angle_step = 0.1
+
+        delta_azimut = self.input_azimut - self.min_azimut
+        print "Delta Azimut: %s" % delta_azimut
+
+        delta_angle = self.input_angle - self.min_angle
+        print "Delta Angle: %s" % delta_angle
+
+        #linear inerpolation
+        min_azimut_max_angle = ((azimut_step * (20 - delta_azimut)) *
+                               (angle_step * delta_angle))
+
+        max_azimut_max_angle = ((azimut_step * delta_azimut) *
+                               (angle_step * delta_angle))
+
+        min_azimut_min_angle = ((azimut_step * (20 - delta_azimut)) *
+                               (angle_step * (10 - delta_angle)))
+
+        max_azimut_min_angle = ((azimut_step * delta_azimut) *
+                               (angle_step * (10 - delta_angle)))
+
+
+        coefficients_total = (min_azimut_max_angle + max_azimut_max_angle +
+                            min_azimut_min_angle + max_azimut_min_angle)
+
+        # check that the coefficients sum up to 1.0
+        if abs(coefficients_total - 1) > 0.01:
+            error = ('The coefficients don\'t sum up to 1.0, found: %s' %
+                     coefficients_total)
+            raise ValueError(error)
+
+        return {
+            'min_azimut_max_angle': min_azimut_max_angle,
+            'max_azimut_max_angle': max_azimut_max_angle,
+            'min_azimut_min_angle': min_azimut_min_angle,
+            'max_azimut_min_angle': max_azimut_min_angle}
 
     def _calculate_field_names(self):
         # 7 needs XXX AND 20
         # 234 needs 220 and 240
         # 358 needs 340 and XXX
-        min_azimut = (self.azimut // 20) * 20
+        min_azimut = (self.input_azimut // 20) * 20
 
         max_azimut = min_azimut + 20
+
+        # save the numeric version
+        self.min_azimut = min_azimut
+        self.max_azimut = max_azimut
+
         if max_azimut == 360:
             max_azimut = 0
 
@@ -113,22 +171,24 @@ class IrrdiationCalculator(object):
         min_azimut = min_azimut.zfill(3)
         max_azimut = str(max_azimut)
         max_azimut = max_azimut.zfill(3)
-        self.azimut_fields = (min_azimut, max_azimut)
 
         # 7 needs 0 AND 10
         # 56 needs 50 and 60
         # 89 needs 80 and 90
-        min_angle = (self.angle // 10) * 10
+        min_angle = (self.input_angle // 10) * 10
         if min_angle == 90:
             min_angle = 80
         max_angle = min_angle + 10
+
+        # save the numeric version
+        self.min_angle = min_angle
+        self.max_angle = max_angle
 
         # convert 0 to 00
         min_angle = str(min_angle)
         min_angle = min_angle.zfill(2)
         max_angle = str(max_angle)
         max_angle = max_angle.zfill(2)
-        self.angle_fields = (min_angle, max_angle)
 
         f1 = '%s_%s' % (min_azimut, max_angle)
         f2 = '%s_%s' % (max_azimut, max_angle)
@@ -139,7 +199,13 @@ class IrrdiationCalculator(object):
         f3 = '%s_%s' % (min_azimut, min_angle)
         f4 = '%s_%s' % (max_azimut, min_angle)
 
-        self.field_names = [f1, f2, f3, f4]
+        # TODO REMOVE when new DB
+        f1 = f1[:-1]
+        f2 = f2[:-1]
+        f3 = f3[:-1]
+        f4 = f4[:-1]
+        # END remove
+        self.field_names = (f1, f2, f3, f4)
 
 
 class Usage(Exception):
