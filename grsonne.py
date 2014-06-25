@@ -299,6 +299,9 @@ def print_help():
     print 'python grsonne.py x y azimut angle'
     print 'python grsonne.py 740020 184970 346 47'
     print '\nor to run the regresion tests call: python grsonne.py --test'
+    print
+    print 'From a python program, instantiate IrradiationCalculator and call '\
+          'the calculate method'
 
 if __name__ == '__main__':
     sys.exit(main())
