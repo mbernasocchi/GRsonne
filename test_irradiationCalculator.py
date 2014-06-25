@@ -10,10 +10,12 @@ Contact : marco@opengis.ch
      (at your option) any later version.
 
 """
+
 __author__ = 'marco@opengis.ch'
 __date__ = '15/06/2014'
 
 import unittest
+from sqlite3 import OperationalError
 from grsonne import IrradiationCalculator
 
 
@@ -36,6 +38,51 @@ class TestIrradiationCalculator(unittest.TestCase):
         self._run_calculation_test(740020, 184970, 359, 55, 562)
         self._run_calculation_test(740020, 184970, 359, 80, 344)
         self._run_calculation_test(740020, 184970, 360, 90, 301)
+
+    def test_wrong_values(self):
+        # x too small
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          692000, 184970, 0, 0)
+        # x too big
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          834000, 184970, 0, 0)
+        # y too small
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 114600, 0, 0)
+        # y too big
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 215000, 0, 0)
+        # azimut too small
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 184970, -1, 0)
+        # azimut too big
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 184970, 361, 0)
+        # angle too small
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 184970, 0, -1)
+        # angle too big
+        self.assertRaises(ValueError,
+                          self.runner.calculate,
+                          740020, 184970, 0, 91)
+
+    def test_wrong_query(self):
+        self.runner.calculate(740020, 184970, 0, 0)
+        #fake an invalid query
+        self.runner.center_x = 0
+        self.assertRaises(RuntimeError, self.runner.get_values)
+
+        self.runner.table_name = 'WRONG_NAME'
+        self.assertRaises(OperationalError,
+                          self.runner.calculate,
+                          740020, 184970, 0, 0)
 
     def _run_calculation_test(self, x, y, azimut, angle, expected_result):
         self.assertEqual(
