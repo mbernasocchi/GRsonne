@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+'''
 GRsonne
 
 Contact : marco@opengis.ch
@@ -9,46 +9,57 @@ Contact : marco@opengis.ch
      the Free Software Foundation; either version 3 of the License, or
      (at your option) any later version.
 
-"""
+'''
+
 __author__ = 'marco@opengis.ch'
 __date__ = '15/06/2014'
 
+import os
 import sys
 import getopt
 import sqlite3
 
 
-class IrrdiationCalculator(object):
+class IrradiationCalculator(object):
 
-    def __init__(self, input_x, input_y, input_azimut, input_angle):
-        self.input_x = input_x
-        self.input_y = input_y
+    def __init__(self):
+        self.input_x = None
+        self.input_y = None
         self.center_x = None
         self.center_y = None
 
-        self.input_azimut = input_azimut
+        self.input_azimut = None
         self.min_azimut = None
         self.max_azimut = None
 
-        self.input_angle = input_angle
+        self.input_angle = None
         self.min_angle = None
         self.max_angle = None
 
         self.field_names = []
 
-        self.irridation = None
+        self.irradiation = None
+
         self.db = sqlite3.connect(
-            '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
+            '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite'
+        )
         self.cursor = self.db.cursor()
 
-    def run(self):
+    def calculate(self, input_x, input_y, input_azimut, input_angle):
+        self.input_x = input_x
+        self.input_y = input_y
+        self.input_azimut = input_azimut
+        self.input_angle = input_angle
+
         self.check_input()
         self.center_x, self.center_y = self.get_center_coords()
         self._calculate_field_names()
         values = self.get_values()
         print values
         coefficients = self._calculate_coeficients()
-        print self._run_calc(values, coefficients)
+        self.irradiation = self._run_calc(values, coefficients)
+        print self.irradiation
+        return self.irradiation
 
     @staticmethod
     def _run_calc(values, coefficients):
@@ -70,6 +81,8 @@ class IrrdiationCalculator(object):
                'FROM "GRsonne" '
                'WHERE x = ? AND y = ?'
                 % self.field_names)
+        print sql
+        print values
         self.cursor.execute(sql, values)
         res = self.cursor.fetchone()
         return {'min_azimut_max_angle': res[0],
@@ -117,10 +130,10 @@ class IrrdiationCalculator(object):
         angle_step = 0.1
 
         delta_azimut = self.input_azimut - self.min_azimut
-        print "Delta Azimut: %s" % delta_azimut
+        print 'Delta Azimut: %s' % delta_azimut
 
         delta_angle = self.input_angle - self.min_angle
-        print "Delta Angle: %s" % delta_angle
+        print 'Delta Angle: %s' % delta_angle
 
         #linear inerpolation
         min_azimut_max_angle = ((azimut_step * (20 - delta_azimut)) *
@@ -214,25 +227,42 @@ class Usage(Exception):
 
 
 def main(argv=None):
-        if argv is None:
-            argv = sys.argv
+    if argv is None:
+        argv = sys.argv
+    try:
         try:
-            try:
-                opts, args = getopt.getopt(argv[1:], "h", ["help"])
-            except getopt.error, msg:
-                raise Usage(msg)
-        except Usage, err:
-            print >>sys.stderr, err.msg
-            print >>sys.stderr, "for help use --help"
-            return 2
+            opts, args = getopt.getopt(argv[1:], 'ht', ['help', 'test'])
+        except getopt.error, msg:
+            raise Usage(msg)
+    except Usage, err:
+        print >>sys.stderr, err.msg
+        print >>sys.stderr, 'for help use --help'
+        return 2
 
-        if len(args) == 4:
-            args = [int(arg) for arg in args]
-            calculator = IrrdiationCalculator(*args)
-        else:
-            calculator = IrrdiationCalculator(740020, 184970, 181, 45)
+    for o, a in opts:
+        if o in ('-h', '--help'):
+            print_help()
+            return 1
 
-        calculator.run()
+        if o == '--test':
+            print 'Running Tests'
+            return os.system('python test_irradiationCalculator.py')
 
-if __name__ == "__main__":
+    calculator = IrradiationCalculator()
+    if len(args) == 4:
+        args = [int(arg) for arg in args]
+        calculator.calculate(*args)
+        return 0
+    else:
+        print_help()
+        return 1
+
+
+def print_help():
+    print 'Call as following:'
+    print 'python grsonne.py x y azimut angle'
+    print 'python grsonne.py 740020 184970 346 47'
+    print '\nor to run the regresion tests call: python grsonne.py --test'
+
+if __name__ == '__main__':
     sys.exit(main())
