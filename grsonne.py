@@ -17,11 +17,16 @@ __date__ = '15/06/2014'
 import os
 import sys
 import getopt
+import logging
+
+LOGGER = logging.getLogger('gr_sonne')
+LOGGER.setLevel(logging.DEBUG)
+LOGGER.addHandler(logging.StreamHandler())
 
 
 class IrradiationCalculator(object):
-
     def __init__(self, db, host=None, port=None, user=None, password=None):
+
         self.input_x = None
         self.input_y = None
         self.center_x = None
@@ -38,7 +43,6 @@ class IrradiationCalculator(object):
         self.field_names = []
 
         self.irradiation = None
-
         if os.path.isfile(db):
             #use SQLITE
             import sqlite3
@@ -46,6 +50,7 @@ class IrradiationCalculator(object):
             self.table_name = 'irradiation'
             self.column_prefix = 'I'
             self.db_value_placeholder = '?'
+            LOGGER.debug('Using SQLITE: %s' % db)
         else:
             #use PostgreSQL
             import psycopg2
@@ -54,6 +59,7 @@ class IrradiationCalculator(object):
             self.table_name = 'gr_sonne.irradiation'
             self.column_prefix = 'i'
             self.db_value_placeholder = '%s'
+            LOGGER.debug('Using PostgreSQL: %s' % db)
 
     def calculate(self, input_x, input_y, input_azimut, input_angle):
         self.input_x = input_x
@@ -65,10 +71,10 @@ class IrradiationCalculator(object):
         self.center_x, self.center_y = self.get_center_coords()
         self._calculate_field_names()
         values = self.get_values()
-        print values
+        LOGGER.debug('DB result: %s' % values)
         coefficients = self._calculate_coeficients()
         self.irradiation = self._run_calc(values, coefficients)
-        print self.irradiation
+        LOGGER.debug('Calculated irradiation: %s' % self.irradiation)
         return self.irradiation
 
     @staticmethod
@@ -96,12 +102,15 @@ class IrradiationCalculator(object):
         sql += 'WHERE x = %s AND y = %s' % (self.db_value_placeholder,
                                             self.db_value_placeholder)
 
-        print sql
-        print values
+        query_string = 'SQL QUERY: %s %s' % (sql, values)
+        LOGGER.debug(query_string)
         cursor = self.db.cursor()
         cursor.execute(sql, values)
         result = cursor.fetchone()
         cursor.close()
+        if result is None:
+            raise RuntimeError('The %s returned no results. Something must '
+                               'have gone wrong.' % query_string)
         return {'min_azimut_max_angle': int(result[0]),
                 'max_azimut_max_angle': int(result[1]),
                 'min_azimut_min_angle': int(result[2]),
@@ -112,12 +121,12 @@ class IrradiationCalculator(object):
 
         error_template = 'Invalid %s: Valid range is %s - %s, found %s'
 
-        error_message = error_template % ('x', 693000, 834000, self.input_x)
-        if self.input_x < 693000 or self.input_x > 834000:
+        error_message = error_template % ('x', 693000, 833999, self.input_x)
+        if self.input_x < 693000 or self.input_x > 833999:
             check_errors.append(error_message)
 
-        error_message = error_template % ('y', 114700, 215000, self.input_y)
-        if self.input_y < 114700 or self.input_y > 215000:
+        error_message = error_template % ('y', 114700, 214999, self.input_y)
+        if self.input_y < 114700 or self.input_y > 214999:
             check_errors.append(error_message)
 
         error_message = error_template % ('azimut', 0, 360, self.input_azimut)
@@ -147,10 +156,10 @@ class IrradiationCalculator(object):
         angle_step = 0.1
 
         delta_azimut = self.input_azimut - self.min_azimut
-        print 'Delta Azimut: %s' % delta_azimut
+        LOGGER.debug('Delta Azimut: %s' % delta_azimut)
 
         delta_angle = self.input_angle - self.min_angle
-        print 'Delta Angle: %s' % delta_angle
+        LOGGER.debug('Delta Angle: %s' % delta_angle)
 
         #linear inerpolation
         min_azimut_max_angle = ((azimut_step * (20 - delta_azimut)) *
@@ -229,8 +238,8 @@ class IrradiationCalculator(object):
         f3 = '%s_%s' % (min_azimut, min_angle)
         f4 = '%s_%s' % (max_azimut, min_angle)
 
-        # TODO REMOVE HACK when new DB
-        if self.db_value_placeholder == '?':
+        # TODO REMOVE HACK when new DB is delivered
+        if self.db_value_placeholder != '%s':
             f1 = f1[:-1]
             f2 = f2[:-1]
             f3 = f3[:-1]
@@ -266,7 +275,8 @@ def main(argv=None):
             print 'Running Tests'
             return os.system('python test_irradiationCalculator.py')
 
-    calculator = IrradiationCalculator('/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
+    #calculator = IrradiationCalculator(
+    # '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
     calculator = IrradiationCalculator('spatial_data')
     if len(args) == 4:
         args = [int(arg) for arg in args]
