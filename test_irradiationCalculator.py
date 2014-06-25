@@ -21,7 +21,7 @@ class TestIrradiationCalculator(unittest.TestCase):
     RESULT_ALLOWANCE = 0.0001
 
     def setUp(self):
-        self.runner = IrradiationCalculator()
+        self.runner = IrradiationCalculator('test_fixtures.sqlite')
 
     def test_calculate(self):
         self._run_calculation_test(740020, 184970, 0, 0, 1384)

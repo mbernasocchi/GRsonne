@@ -17,12 +17,11 @@ __date__ = '15/06/2014'
 import os
 import sys
 import getopt
-import sqlite3
 
 
 class IrradiationCalculator(object):
 
-    def __init__(self):
+    def __init__(self, db, host=None, port=None, user=None, password=None):
         self.input_x = None
         self.input_y = None
         self.center_x = None
@@ -40,10 +39,21 @@ class IrradiationCalculator(object):
 
         self.irradiation = None
 
-        self.db = sqlite3.connect(
-            '/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite'
-        )
-        self.cursor = self.db.cursor()
+        if os.path.isfile(db):
+            #use SQLITE
+            import sqlite3
+            self.db = sqlite3.connect(db)
+            self.table_name = 'irradiation'
+            self.column_prefix = 'I'
+            self.db_value_placeholder = '?'
+        else:
+            #use PostgreSQL
+            import psycopg2
+            self.db = psycopg2.connect(database=db, host=host, port=port,
+                                       user=user, password=password)
+            self.table_name = 'gr_sonne.irradiation'
+            self.column_prefix = 'i'
+            self.db_value_placeholder = '%s'
 
     def calculate(self, input_x, input_y, input_azimut, input_angle):
         self.input_x = input_x
@@ -77,18 +87,25 @@ class IrradiationCalculator(object):
 
     def get_values(self):
         values = (self.center_x, self.center_y)
-        sql = ('SELECT I%s, I%s, I%s, I%s '
-               'FROM "GRsonne" '
-               'WHERE x = ? AND y = ?'
-                % self.field_names)
+        sql = 'SELECT %s%s, %s%s, %s%s, %s%s ' % (
+            self.column_prefix, self.field_names[0],
+            self.column_prefix, self.field_names[1],
+            self.column_prefix, self.field_names[2],
+            self.column_prefix, self.field_names[3])
+        sql += 'FROM %s ' % self.table_name
+        sql += 'WHERE x = %s AND y = %s' % (self.db_value_placeholder,
+                                            self.db_value_placeholder)
+
         print sql
         print values
-        self.cursor.execute(sql, values)
-        res = self.cursor.fetchone()
-        return {'min_azimut_max_angle': res[0],
-                'max_azimut_max_angle': res[1],
-                'min_azimut_min_angle': res[2],
-                'max_azimut_min_angle': res[3]}
+        cursor = self.db.cursor()
+        cursor.execute(sql, values)
+        result = cursor.fetchone()
+        cursor.close()
+        return {'min_azimut_max_angle': int(result[0]),
+                'max_azimut_max_angle': int(result[1]),
+                'min_azimut_min_angle': int(result[2]),
+                'max_azimut_min_angle': int(result[3])}
 
     def check_input(self):
         check_errors = []
@@ -212,11 +229,12 @@ class IrradiationCalculator(object):
         f3 = '%s_%s' % (min_azimut, min_angle)
         f4 = '%s_%s' % (max_azimut, min_angle)
 
-        # TODO REMOVE when new DB
-        f1 = f1[:-1]
-        f2 = f2[:-1]
-        f3 = f3[:-1]
-        f4 = f4[:-1]
+        # TODO REMOVE HACK when new DB
+        if self.db_value_placeholder == '?':
+            f1 = f1[:-1]
+            f2 = f2[:-1]
+            f3 = f3[:-1]
+            f4 = f4[:-1]
         # END remove
         self.field_names = (f1, f2, f3, f4)
 
@@ -248,7 +266,8 @@ def main(argv=None):
             print 'Running Tests'
             return os.system('python test_irradiationCalculator.py')
 
-    calculator = IrradiationCalculator()
+    calculator = IrradiationCalculator('/home/marco/Documents/work/QGIS/renewables-now.com/GRsonne/gr_mod.sqlite')
+    calculator = IrradiationCalculator('spatial_data')
     if len(args) == 4:
         args = [int(arg) for arg in args]
         calculator.calculate(*args)
