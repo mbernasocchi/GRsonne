@@ -72,8 +72,8 @@ class IrradiationCalculator(object):
         max_azimut_min_angle = (values['max_azimut_min_angle']
                                 * coefficients['max_azimut_min_angle'])
 
-        return (min_azimut_max_angle + max_azimut_max_angle +
-                min_azimut_min_angle + max_azimut_min_angle)
+        return int(round(min_azimut_max_angle + max_azimut_max_angle +
+                        min_azimut_min_angle + max_azimut_min_angle, 0))
 
     def get_values(self):
         values = (self.center_x, self.center_y)
