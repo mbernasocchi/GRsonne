@@ -23,6 +23,7 @@ __date__ = '15/06/2014'
 
 import unittest
 from sqlite3 import OperationalError
+from psycopg2 import ProgrammingError
 from grsonne import IrradiationCalculator
 
 
@@ -30,6 +31,7 @@ class TestIrradiationCalculator(unittest.TestCase):
     RESULT_ALLOWANCE = 0.0001
 
     def setUp(self):
+        # self.runner = IrradiationCalculator('spatial_data')
         self.runner = IrradiationCalculator('test_fixtures.sqlite')
 
     def test_calculate(self):
@@ -87,7 +89,7 @@ class TestIrradiationCalculator(unittest.TestCase):
         self.assertRaises(RuntimeError, self.runner.get_values)
 
         self.runner.table_name = 'WRONG_NAME'
-        self.assertRaises(OperationalError,
+        self.assertRaises((OperationalError, ProgrammingError),
                           self.runner.calculate,
                           740020, 184970, 0, 0)
 
