@@ -2,8 +2,8 @@ CREATE SCHEMA IF NOT EXISTS "gr_sonne";
 
 CREATE TABLE IF NOT EXISTS "gr_sonne"."irradiation" (
 	"id" integer PRIMARY KEY,
-	"x" integer,
-	"y" integer,
+	"x" float,
+	"y" float,
 	"ixxx_00" integer,
 	"i000_10" integer,
 	"i000_20" integer,
